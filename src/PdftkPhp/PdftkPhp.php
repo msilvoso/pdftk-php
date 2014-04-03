@@ -40,7 +40,7 @@ class PdftkPhp
     {
         // find pdftk
         if ('' === $execPath) {
-            $execPath = system('which pdftk');
+            $execPath = exec('which pdftk');
             if ('' === $execPath) {
                 $locations = array('/usr/bin/', '/usr/local/bin/', '/bin/');
                 foreach ($locations as $location) {
@@ -90,7 +90,7 @@ class PdftkPhp
             header("Content-Disposition: attachment; filename=\"$pdfFilename\"");
             // Actually make the PDF by running pdftk - make sure the path to pdftk is correct
             // The PDF will be output directly to the browser - apart from the original PDF file, no actual PDF wil be saved on the server.
-            passthru(escapeshellcmd($this->executionPath).escapeshellarg(" $pdfOriginal fill_form $fdfFn output - flatten"));
+            passthru(escapeshellcmd($this->execPath).' '.escapeshellarg($pdfOriginal).' fill_form '.escapeshellarg($fdfFn).' output - flatten');
             // delete temporary fdf file
             unlink($fdfFn);
         } else { // error
