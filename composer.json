@@ -1,0 +1,16 @@
+{
+    "name": "msilvoso/pdftk-php",
+    "type": "library",
+    "description": "A simple PHP PDFTK wrapper to fill forms.",
+    "keywords": ["pdf", "php", "pdftk"],
+    "homepage": "https://github.com/msilvoso/pdftk-php.git",
+    "license": "BSD 2",
+    "require": {
+        "php": ">=5.4.0",
+    },
+    "autoload": {
+        "psr-0": {
+            "PdftkPhp": "src/"
+        }
+    }
+}
