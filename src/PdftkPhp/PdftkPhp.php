@@ -84,6 +84,11 @@ class PdftkPhp
      */
     public function makePdf($fdfDataStrings, $fdfDataNames, $fieldsHidden, $fieldsReadonly, $pdfOriginal, $pdfFilename)
     {
+        // check if the pdf form exists and is a pdf
+        $fInfo = finfo_open(FILEINFO_MIME_TYPE);
+        if (!is_file($pdfOriginal) || finfo_file($fInfo, $pdfOriginal) != 'application/pdf') {
+            throw new \Exception('Error: Original does not exist or is not a pdf');
+        }
         // Create the fdf file
         $fdf = $this->forgeFdf('', $fdfDataStrings, $fdfDataNames, $fieldsHidden, $fieldsReadonly);
         // Save the fdf file temporarily - make sure the server has write permissions in the folder you specify in tempnam()
