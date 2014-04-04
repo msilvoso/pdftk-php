@@ -14,7 +14,7 @@ namespace PdftkPhp;
  *    Modified by: Manuel Silvoso
  *
  *    History:
- *        2014-04-01 - Adaptation to composer
+ *        2014-04-01 - PSR-2 and PSR-4 adaptation
  *        8/26/08 - Initial programming
  *
  *    Usage:
@@ -36,6 +36,13 @@ class PdftkPhp
     protected $execPath;
     protected $tmpDir;
 
+    /**
+     * Check for the location of the pdftk binary
+     * this pèrobably only works on linux
+     *
+     * @param string $tmpDir   temporary dir to store temporary fdfs
+     * @param string $execPath the location of pdftk
+     */
     public function __construct($tmpDir = '/tmp', $execPath = '')
     {
         // find pdftk
@@ -88,13 +95,14 @@ class PdftkPhp
             // Send a force download header to the browser with a file MIME type
             header("Content-Type: application/force-download");
             header("Content-Disposition: attachment; filename=\"$pdfFilename\"");
+            header("Content-Transfer-Encoding: binary");
             // Actually make the PDF by running pdftk - make sure the path to pdftk is correct
             // The PDF will be output directly to the browser - apart from the original PDF file, no actual PDF wil be saved on the server.
             passthru(escapeshellcmd($this->execPath).' '.escapeshellarg($pdfOriginal).' fill_form '.escapeshellarg($fdfFn).' output - flatten');
             // delete temporary fdf file
             unlink($fdfFn);
         } else { // error
-            echo 'Error: unable to write temp fdf file: '. $fdfFn;
+            throw new \Exception('Error: unable to write temp fdf file: '. $fdfFn);
         }
     } // end of makePdf()
 
