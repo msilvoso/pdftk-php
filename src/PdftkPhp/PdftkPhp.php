@@ -98,7 +98,7 @@ class PdftkPhp
             fwrite($fp, $fdf);
             fclose($fp);
             // Send a force download header to the browser with a file MIME type
-            header("Content-Type: application/force-download");
+            header("Content-Type: application/pdf");
             header("Content-Disposition: attachment; filename=\"$pdfFilename\"");
             header("Content-Transfer-Encoding: binary");
             // Actually make the PDF by running pdftk - make sure the path to pdftk is correct
