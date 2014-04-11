@@ -14,6 +14,7 @@ namespace PdftkPhp;
  *    Modified by: Manuel Silvoso
  *
  *    History:
+ *        2014-04-11 - UTF-8 data compatibility through XFDF
  *        2014-04-01 - PSR-2 and PSR-4 adaptation
  *        8/26/08 - Initial programming
  *
@@ -82,7 +83,7 @@ class PdftkPhp
      *        * Any field listed in $fdfDataStrings or $fdfDataNames that you want hidden or read-only must have its field name added to $fieldsHidden or $fieldsReadonly; do this even if your form has these bits set already
      *
      */
-    public function makePdf($fdfDataStrings, $fdfDataNames, $fieldsHidden, $fieldsReadonly, $pdfOriginal, $pdfFilename)
+    public function makePdf($fdfDataStrings, $fdfDataNames, $fieldsHidden, $fieldsReadonly, $pdfOriginal, $pdfFilename, $generateXfdf = true)
     {
         // check if the pdf form exists and is a pdf
         $fInfo = finfo_open(FILEINFO_MIME_TYPE);
@@ -90,7 +91,11 @@ class PdftkPhp
             throw new \Exception('Error: Original does not exist or is not a pdf');
         }
         // Create the fdf file
-        $fdf = $this->forgeFdf('', $fdfDataStrings, $fdfDataNames, $fieldsHidden, $fieldsReadonly);
+        if (true === $generateXfdf) {
+            $fdf = $this->forgeXfdf($fdfDataStrings);
+        } else {
+            $fdf = $this->forgeFdf('', $fdfDataStrings, $fdfDataNames, $fieldsHidden, $fieldsReadonly);
+        }
         // Save the fdf file temporarily - make sure the server has write permissions in the folder you specify in tempnam()
         $fdfFn = tempnam($this->tmpDir, "fdf");
         $fp = fopen($fdfFn, 'w');
@@ -99,7 +104,7 @@ class PdftkPhp
             fclose($fp);
             // Send a force download header to the browser with a file MIME type
             header("Content-Type: application/pdf");
-            header("Content-Disposition: attachment; filename=\"$pdfFilename\"");
+            header("Content-Disposition: attachment; filename =\"$pdfFilename\"");
             header("Content-Transfer-Encoding: binary");
             // Actually make the PDF by running pdftk - make sure the path to pdftk is correct
             // The PDF will be output directly to the browser - apart from the original PDF file, no actual PDF wil be saved on the server.
@@ -111,6 +116,40 @@ class PdftkPhp
         }
     } // end of makePdf()
 
+    /**
+     * By using xfdf instead of simple fdf you can use utf-8 to fill the forms
+     * but it does not handle extra fdf features like the hidden or readonly attributes
+     *
+     * @param  array $fdfDataStrings associative array with every form field and value
+     * @return string                 the generated xfdf (xml)
+     */
+    protected function forgeXfdf($fdfDataStrings)
+    {
+        //shamelessly stolen from https://stackoverflow.com/questions/3973283/flatten-fdf-xfdf-forms-to-pdf-in-php-with-utf-8-characters
+        $xml = new \DOMDocument('1.0', 'UTF-8');
+
+        $rootNode = $xml->createElement('xfdf');
+        $rootNode->setAttribute('xmlns', 'http://ns.adobe.com/xfdf/');
+        $rootNode->setAttribute('xml:space', 'preserve'); // this has to be 'preserve'
+        $xml->appendChild($rootNode);
+
+        $fieldsNode = $xml->createElement('fields');
+        $rootNode->appendChild($fieldsNode);
+
+        foreach ($fdfDataStrings as $field => $value) {
+            $fieldNode = $xml->createElement('field');
+            $fieldNode->setAttribute('name', $field);
+            $fieldsNode->appendChild($fieldNode);
+
+            $valueNode = $xml->createElement('value');
+            $valueNode->appendChild($xml->createTextNode($value));
+            $fieldNode->appendChild($valueNode);
+        }
+
+        return $xml->saveXML();
+    }
+
+    //the old stuff
     protected function forgeFdf($pdfFormUrl, &$fdfDataStrings, &$fdfDataNames, &$fieldsHidden, &$fieldsReadonly)
     {
         /* forgeFdf, by Sid Steward
@@ -119,45 +158,45 @@ class PdftkPhp
            PDF can be particular about CR and LF characters, so I spelled them out in hex: CR == \x0d : LF == \x0a
         */
         $fdf = "%FDF-1.2\x0d%\xe2\xe3\xcf\xd3\x0d\x0a"; // header
-        $fdf.= "1 0 obj\x0d<< "; // open the Root dictionary
-        $fdf.= "\x0d/FDF << "; // open the FDF dictionary
-        $fdf.= "/Fields [ "; // open the form Fields array
+        $fdf .= "1 0 obj\x0d<< "; // open the Root dictionary
+        $fdf .= "\x0d/FDF << "; // open the FDF dictionary
+        $fdf .= "/Fields [ "; // open the form Fields array
         $fdfDataStrings = $this->burstDotsIntoArrays($fdfDataStrings);
         $this->forgeFdfFieldsStrings($fdf, $fdfDataStrings, $fieldsHidden, $fieldsReadonly);
-        $fdfDataNames= $this->burstDotsIntoArrays($fdfDataNames);
+        $fdfDataNames = $this->burstDotsIntoArrays($fdfDataNames);
         $this->forgeFdfFieldsNames($fdf, $fdfDataNames, $fieldsHidden, $fieldsReadonly);
 
-        $fdf.= "] \x0d"; // close the Fields array
+        $fdf .= "] \x0d"; // close the Fields array
 
         // the PDF form filename or URL, if given
         if ($pdfFormUrl) {
-            $fdf.= "/F (".$this->escapePdfString($pdfFormUrl).") \x0d";
+            $fdf .= "/F (".$this->escapePdfString($pdfFormUrl).") \x0d";
         }
 
-        $fdf.= ">> \x0d"; // close the FDF dictionary
-        $fdf.= ">> \x0dendobj\x0d"; // close the Root dictionary
+        $fdf .= ">> \x0d"; // close the FDF dictionary
+        $fdf .= ">> \x0dendobj\x0d"; // close the Root dictionary
 
         // trailer; note the "1 0 R" reference to "1 0 obj" above
-        $fdf.= "trailer\x0d<<\x0d/Root 1 0 R \x0d\x0d>>\x0d";
-        $fdf.= "%%EOF\x0d\x0a";
+        $fdf .= "trailer\x0d<<\x0d/Root 1 0 R \x0d\x0d>>\x0d";
+        $fdf .= "%%EOF\x0d\x0a";
 
         return $fdf;
     }
 
     public function escapePdfString($ss)
     {
-        $backslash= chr(0x5c);
-        $ssEsc= '';
-        $ssLen= strlen($ss);
-        for ($ii=0; $ii<$ssLen; ++$ii) {
-            if (ord($ss{$ii})== 0x28 ||  // open paren
-                ord($ss{$ii})== 0x29 ||  // close paren
-                ord($ss{$ii})== 0x5c) {  // backslash
-                $ssEsc.= $backslash.$ss{$ii}; // escape the character w/ backslash
+        $backslash = chr(0x5c);
+        $ssEsc = '';
+        $ssLen = strlen($ss);
+        for ($ii = 0; $ii<$ssLen; ++$ii) {
+            if (ord($ss{$ii}) == 0x28 ||  // open paren
+                ord($ss{$ii}) == 0x29 ||  // close paren
+                ord($ss{$ii}) == 0x5c) {  // backslash
+                $ssEsc .= $backslash.$ss{$ii}; // escape the character w/ backslash
             } elseif (ord($ss{$ii})<32 || 126<ord($ss{$ii})) {
-                $ssEsc.= sprintf("\\%03o", ord($ss{$ii})); // use an octal code
+                $ssEsc .= sprintf("\\%03o", ord($ss{$ii})); // use an octal code
             } else {
-                $ssEsc.= $ss{$ii};
+                $ssEsc .= $ss{$ii};
             }
         }
         return $ssEsc;
@@ -165,15 +204,15 @@ class PdftkPhp
 
     protected function escapePdfName($ss)
     {
-        $ssEsc= '';
-        $ssLen= strlen($ss);
-        for ($ii=0; $ii<$ssLen; ++$ii) {
+        $ssEsc = '';
+        $ssLen = strlen($ss);
+        for ($ii = 0; $ii<$ssLen; ++$ii) {
             if (ord($ss{$ii})<33 ||
                 126<ord($ss{$ii}) ||
-                ord($ss{$ii})==0x23) {// hash mark
-                $ssEsc.= sprintf("#%02x", ord($ss{$ii})); // use a hex code
+                ord($ss{$ii}) == 0x23) {// hash mark
+                $ssEsc .= sprintf("#%02x", ord($ss{$ii})); // use a hex code
             } else {
-                $ssEsc.= $ss{$ii};
+                $ssEsc .= $ss{$ii};
             }
         }
         return $ssEsc;
@@ -187,39 +226,39 @@ class PdftkPhp
      */
     protected function burstDotsIntoArrays(&$fdfDataOld)
     {
-        $fdfDataNew= array();
+        $fdfDataNew = array();
 
         foreach ($fdfDataOld as $key => $value) {
-            $keySplit= explode('.', (string)$key, 2);
+            $keySplit = explode('.', (string)$key, 2);
 
             if (count($keySplit) == 2) { // handle dot
                 if (!array_key_exists((string)($keySplit[0]), $fdfDataNew)) {
-                    $fdfDataNew[ (string)($keySplit[0]) ] = array();
+                    $fdfDataNew[(string)($keySplit[0])] = array();
                 }
-                if (gettype($fdfDataNew[ (string)($keySplit[0]) ])!= 'array') {
+                if (gettype($fdfDataNew[(string)($keySplit[0])]) != 'array') {
                     // this new key collides with an existing name; this shouldn't happen;
                     // associate string value with the special empty key in array, anyhow;
 
-                    $fdfDataNew[ (string)($keySplit[0]) ] = array('' => $fdfDataNew[ (string)($keySplit[0]) ]);
+                    $fdfDataNew[(string)($keySplit[0])] = array('' => $fdfDataNew[(string)($keySplit[0])]);
                 }
 
-                $fdfDataNew[ (string)($keySplit[0]) ][ (string)($keySplit[1]) ] = $value;
+                $fdfDataNew[(string)($keySplit[0])][(string)($keySplit[1])] = $value;
             } else { // no dot
                 if (array_key_exists((string)($keySplit[0]), $fdfDataNew) &&
-                    gettype($fdfDataNew[ (string)($keySplit[0]) ])== 'array') {
+                    gettype($fdfDataNew[(string)($keySplit[0])]) == 'array') {
                     // this key collides with an existing array; this shouldn't happen;
                     // associate string value with the special empty key in array, anyhow;
 
-                    $fdfDataNew[ (string)$key ]['']= $value;
+                    $fdfDataNew[(string)$key][''] = $value;
                 } else { // simply copy
-                    $fdfDataNew[ (string)$key ]= $value;
+                    $fdfDataNew[(string)$key] = $value;
                 }
             }
         }
 
         foreach ($fdfDataNew as $key => $value) {
             if (gettype($value) == 'array') {
-                $fdfDataNew[ (string)$key ]= $this->burstDotsIntoArrays($value); // recurse
+                $fdfDataNew[(string)$key] = $this->burstDotsIntoArrays($value); // recurse
             }
         }
 
@@ -229,15 +268,15 @@ class PdftkPhp
     protected function forgeFdfFieldsFlags(&$fdf, $fieldName, &$fieldsHidden, &$fieldsReadonly)
     {
         if (in_array($fieldName, $fieldsHidden)) {
-            $fdf.= "/SetF 2 "; // set
+            $fdf .= "/SetF 2 "; // set
         } else {
-            $fdf.= "/ClrF 2 "; // clear
+            $fdf .= "/ClrF 2 "; // clear
         }
 
         if (in_array($fieldName, $fieldsReadonly)) {
-            $fdf.= "/SetFf 1 "; // set
+            $fdf .= "/SetFf 1 "; // set
         } else {
-            $fdf.= "/ClrFf 1 "; // clear
+            $fdf .= "/ClrFf 1 "; // clear
         }
     }
 
@@ -251,46 +290,44 @@ class PdftkPhp
     protected function forgeFdfFields(&$fdf, &$fdfData, &$fieldsHidden, &$fieldsReadonly, $accumulatedName, $stringsB)
     {
         if (0 < strlen($accumulatedName)) {
-            $accumulatedName.= '.'; // append period seperator
+            $accumulatedName .= '.'; // append period seperator
         }
 
         foreach ($fdfData as $key => $value) {
             // we use string casts to prevent numeric strings from being silently converted to numbers
 
-            $fdf.= "<< "; // open dictionary
+            $fdf .= "<< "; // open dictionary
 
-            if (gettype($value)== 'array') { // parent; recurse
-                $fdf.= "/T (".$this->escapePdfString((string)$key).") "; // partial field name
-                $fdf.= "/Kids [ ";                                    // open Kids array
+            if (gettype($value) == 'array') { // parent; recurse
+                $fdf .= "/T (".$this->escapePdfString((string)$key).") "; // partial field name
+                $fdf .= "/Kids [ ";                                    // open Kids array
 
                 // recurse
                 $this->forgeFdfFields($fdf, $value, $fieldsHidden, $fieldsReadonly, $accumulatedName.(string)$key, $stringsB);
 
-                $fdf.= "] "; // close Kids array
+                $fdf .= "] "; // close Kids array
             } else {
                 // field name
-                $fdf.= "/T (".$this->escapePdfString((string)$key).") ";
+                $fdf .= "/T (".$this->escapePdfString((string)$key).") ";
 
                 // field value
                 if ($stringsB) { // string
-                    $fdf.= "/V (".$this->escapePdfString((string)$value).") ";
+                    $fdf .= "/V (".$this->escapePdfString((string)$value).") ";
                 } else { // name
-                    $fdf.= "/V /".$this->escapePdfName((string)$value). " ";
+                    $fdf .= "/V /".$this->escapePdfName((string)$value). " ";
                 }
 
                 // field flags
                 $this->forgeFdfFieldsFlags($fdf, $accumulatedName. (string)$key, $fieldsHidden, $fieldsReadonly);
             }
-            $fdf.= ">> \x0d"; // close dictionary
+            $fdf .= ">> \x0d"; // close dictionary
         }
     }
-
 
     protected function forgeFdfFieldsStrings(&$fdf, &$fdfDataStrings, &$fieldsHidden, &$fieldsReadonly)
     {
         return $this->forgeFdfFields($fdf, $fdfDataStrings, $fieldsHidden, $fieldsReadonly, '', true); // true => strings data
     }
-
 
     protected function forgeFdfFieldsNames(&$fdf, &$fdfDataNames, &$fieldsHidden, &$fieldsReadonly)
     {
